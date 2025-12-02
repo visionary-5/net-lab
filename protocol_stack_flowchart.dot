@@ -1,0 +1,155 @@
+digraph ProtocolStack {
+    // 图形全局属性
+    graph [rankdir=TB, splines=ortho, nodesep=0.8, ranksep=1.2, fontname="Microsoft YaHei Bold"];
+    node [shape=box, style="rounded,filled", fillcolor=lightblue, fontname="Microsoft YaHei Bold", fontsize=11, width=2.5, height=0.6];
+    edge [fontname="Microsoft YaHei Bold", fontsize=10];
+
+    // ============ 主控制层 ============
+    subgraph cluster_main {
+        label="主控制层";
+        style=filled;
+        fillcolor=lightyellow;
+        
+        main [label="main()\nweb_server.c", fillcolor=gold, width=3];
+        net_init [label="net_init()\n协议栈初始化", fillcolor=gold, width=3];
+        net_poll [label="net_poll()\n主循环轮询", fillcolor=gold, width=3];
+    }
+
+    // ============ 数据链路层 - 接收方向 ============
+    subgraph cluster_eth_in {
+        label="以太网层 - 接收";
+        style=filled;
+        fillcolor="#E8F4F8";
+        
+        driver_recv [label="driver_recv()\n驱动接收数据帧", fillcolor="#B3D9E6"];
+        ethernet_poll [label="ethernet_poll()\n以太网轮询", fillcolor="#B3D9E6"];
+        ethernet_in [label="ethernet_in()\n处理以太网帧\n检查长度\n解析协议类型", fillcolor="#B3D9E6"];
+    }
+
+    // ============ 网络层 - 接收方向 ============
+    subgraph cluster_net_in {
+        label="网络层 - 接收";
+        style=filled;
+        fillcolor="#E8F8E8";
+        
+        net_in_dispatch [label="net_in()\n协议分发", fillcolor="#B3E6B3"];
+        arp_in [label="arp_in()\nARP请求/响应处理\n更新ARP表\n发送缓存包", fillcolor="#B3E6B3"];
+        ip_in [label="ip_in()\nIP包处理\n校验和验证\n分片重组", fillcolor="#B3E6B3"];
+    }
+
+    // ============ 传输层 - 接收方向 ============
+    subgraph cluster_trans_in {
+        label="传输层 - 接收";
+        style=filled;
+        fillcolor="#F8E8E8";
+        
+        icmp_in [label="icmp_in()\nICMP Echo请求\n发送Echo响应", fillcolor="#E6B3B3"];
+        udp_in [label="udp_in()\nUDP包处理\n校验和验证\n端口查找", fillcolor="#E6B3B3"];
+        tcp_in [label="tcp_in()\nTCP包处理\n状态机转换\n顺序检查", fillcolor="#E6B3B3"];
+    }
+
+    // ============ 应用层 ============
+    subgraph cluster_app {
+        label="应用层";
+        style=filled;
+        fillcolor="#F8F8E8";
+        
+        http_handler [label="http_request_handler()\n解析HTTP请求\n提取URL", fillcolor="#E6E6B3", width=3];
+        http_respond [label="http_respond()\n读取文件\n构造响应", fillcolor="#E6E6B3", width=3];
+    }
+
+    // ============ 传输层 - 发送方向 ============
+    subgraph cluster_trans_out {
+        label="传输层 - 发送";
+        style=filled;
+        fillcolor="#F0E8F8";
+        
+        tcp_send [label="tcp_send()\n发送HTTP响应\n更新序列号", fillcolor="#D9B3E6"];
+        tcp_out [label="tcp_out()\n添加TCP头部\n计算校验和", fillcolor="#D9B3E6"];
+        icmp_resp [label="icmp_resp()\nICMP Echo应答", fillcolor="#D9B3E6"];
+        icmp_unreachable [label="icmp_unreachable()\nICMP不可达", fillcolor="#D9B3E6"];
+    }
+
+    // ============ 网络层 - 发送方向 ============
+    subgraph cluster_net_out {
+        label="网络层 - 发送";
+        style=filled;
+        fillcolor="#E8F8F0";
+        
+        ip_out [label="ip_out()\n判断是否分片", fillcolor="#B3E6D9"];
+        ip_fragment [label="ip_fragment_out()\n添加IP头部\n计算校验和", fillcolor="#B3E6D9"];
+        arp_out [label="arp_out()\n查找MAC地址\nARP缓存/请求", fillcolor="#B3E6D9"];
+        arp_req [label="arp_req()\n发送ARP请求", fillcolor="#B3E6D9"];
+        arp_resp [label="arp_resp()\n发送ARP响应", fillcolor="#B3E6D9"];
+    }
+
+    // ============ 数据链路层 - 发送方向 ============
+    subgraph cluster_eth_out {
+        label="以太网层 - 发送";
+        style=filled;
+        fillcolor="#F8F0E8";
+        
+        ethernet_out [label="ethernet_out()\n添加以太网头部\n填充MAC地址", fillcolor="#E6D9B3"];
+        driver_send [label="driver_send()\n驱动发送数据帧", fillcolor="#E6D9B3"];
+    }
+
+    // ============ 接收路径 ============
+    main -> net_init [label="初始化"];
+    main -> net_poll [label="循环"];
+    net_poll -> ethernet_poll;
+    ethernet_poll -> driver_recv;
+    driver_recv -> ethernet_in [label="接收数据帧"];
+    ethernet_in -> net_in_dispatch [label="去除以太网头"];
+    
+    net_in_dispatch -> arp_in [label="ARP协议"];
+    net_in_dispatch -> ip_in [label="IP协议"];
+    
+    ip_in -> icmp_in [label="ICMP协议"];
+    ip_in -> udp_in [label="UDP协议"];
+    ip_in -> tcp_in [label="TCP协议"];
+    
+    tcp_in -> http_handler [label="端口80\nHTTP请求"];
+    http_handler -> http_respond [label="GET请求"];
+
+    // ============ 发送路径 ============
+    http_respond -> tcp_send [label="发送响应数据", style=dashed, color=blue];
+    tcp_send -> tcp_out [style=dashed, color=blue];
+    
+    icmp_in -> icmp_resp [label="Echo请求", style=dashed, color=green];
+    tcp_in -> icmp_unreachable [label="端口不可达", style=dashed, color=red];
+    udp_in -> icmp_unreachable [label="端口不可达", style=dashed, color=red];
+    
+    tcp_out -> ip_out [style=dashed, color=blue];
+    icmp_resp -> ip_out [style=dashed, color=green];
+    icmp_unreachable -> ip_out [style=dashed, color=red];
+    
+    ip_out -> ip_fragment [label="添加IP头", style=dashed];
+    ip_fragment -> arp_out [style=dashed];
+    
+    arp_out -> ethernet_out [label="已有MAC", style=dashed];
+    arp_out -> arp_req [label="无MAC\n缓存包", style=dashed, color=orange];
+    
+    arp_in -> arp_resp [label="ARP请求\n目标是本机", style=dashed, color=purple];
+    arp_in -> ethernet_out [label="发送缓存包", style=dashed, color=orange];
+    arp_req -> ethernet_out [style=dashed, color=orange];
+    arp_resp -> ethernet_out [style=dashed, color=purple];
+    
+    ethernet_out -> driver_send [label="添加以太网头", style=dashed];
+
+    // ============ 图例 ============
+    {
+        rank=sink;
+        legend [shape=plaintext, fillcolor=white, label=<
+            <table border="0" cellspacing="0">
+                <tr><td align="left"><b>图例说明：</b></td></tr>
+                <tr><td align="left">实线箭头 = 接收路径</td></tr>
+                <tr><td align="left">虚线箭头 = 发送路径</td></tr>
+                <tr><td align="left">蓝色 = HTTP响应</td></tr>
+                <tr><td align="left">绿色 = ICMP应答</td></tr>
+                <tr><td align="left">红色 = ICMP不可达</td></tr>
+                <tr><td align="left">橙色 = ARP请求</td></tr>
+                <tr><td align="left">紫色 = ARP响应</td></tr>
+            </table>
+        >];
+    }
+}
